@@ -1,3 +1,0 @@
-mkdir aws-blue-green-deployment
-cd aws-blue-green-deployment
-mkdir -p modules/eks
