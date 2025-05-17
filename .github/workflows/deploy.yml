@@ -1,0 +1,52 @@
+name: Blue-Green Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (blue/green)'
+        required: true
+        type: choice
+        options:
+        - blue
+        - green
+
+env:
+  AWS_REGION: "us-east-1"
+  CLUSTER_NAME: "blue-green-cluster"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          aws eks --region ${{ env.AWS_REGION }} update-kubeconfig \
+            --name ${{ env.CLUSTER_NAME }}
+
+      - name: Execute Deployment
+        run: |
+          if [ "${{ github.event.inputs.version }}" = "green" ]; then
+            kubectl apply -f k8s/green-deployment.yaml
+            kubectl patch svc nodejs-app -p '{"spec":{"selector":{"version":"green"}}}'
+            kubectl scale deployment nodejs-app-blue --replicas=0
+          else
+            kubectl apply -f k8s/blue-deployment.yaml
+            kubectl patch svc nodejs-app -p '{"spec":{"selector":{"version":"blue"}}}'
+            kubectl scale deployment nodejs-app-green --replicas=0
+          fi
